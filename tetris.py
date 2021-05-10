@@ -33,21 +33,28 @@ class Figure:
     x = 0
     y = 0
 
-    #   tetromino defined by the following 4 x 4 matrix
-
-    #    0   1   2   3
-    #    4   5   6   7
-    #    8   9   10  11
-    #    12  13  14  15
+    #   tetrominos defined 
 
     figures = [
-        [[1, 5, 9, 13], [4, 5, 6, 7]],      # I
-        [[4, 5, 9, 10], [2, 6, 5, 9]],      # Z
-        [[6, 7, 9, 10], [1, 5, 6, 10]],     # S
-        [[1, 2, 5, 9], [0, 4, 5, 6], [1, 5, 9, 8], [4, 5, 6, 10]],      # J
-        [[1, 2, 6, 10], [5, 6, 7, 9], [2, 6, 10, 11], [3, 5, 6, 7]],      # L
-        [[1, 4, 5, 6], [1, 4, 5, 9], [4, 5, 6, 9], [1, 5, 6, 9]],      # T
-        [[1, 2, 5, 6]],     # O
+        [[1, 1],
+         [1, 1]],
+
+        [[0, 2, 0],
+         [2, 2, 2]],
+
+        [[0, 3, 3],
+         [3, 3, 0]],
+
+        [[4, 4, 0],
+         [0, 4, 4]],
+
+        [[5, 5, 5, 5]],
+
+        [[0, 0, 6],
+         [6, 6, 6]],
+
+        [[7, 0, 0],
+         [7, 7, 7]]
 
         # smaller tetromino pieces
         # [[1, 1, 1, 1]],      # 1p
@@ -61,25 +68,28 @@ class Figure:
         self.y = y
         self.type = random.randint(0, len(self.figures) - 1)
         self.color = random.randint(1, len(colors) - 1)
-        self.rotation = 0
+        self.current_piece = self.figures[self.type]
+        if self.type == 0:  # O piece
+            self.num_rotations = 1
+        elif self.type == 2 or self.type == 3 or self.type == 4:
+            self.num_rotations = 2
+        else:
+            self.num_rotations = 4
+        
 
     def image(self):
-        return self.figures[self.type][self.rotation]
+        return self.current_piece()
 
     def rotate(self):
-        self.rotation = (self.rotation + 1) % len(self.figures[self.type])
-
-    # def get_width(self):
-    #     if self.type == 0: #I piece
-    #         return 1 if self.rotation == 0 else 4
-    #     if self.type == 1: #Z piece
-    #         return 4 if self.rotation == 0 else 2
-    #     if self.type == 2: #S piece
-    #         return 4 if self.rotation == 0 else 2
-    #     if self.type == 3: #J piece
-
-
-
+        num_rows_orig = num_cols_new = len(self.current_piece)
+        num_rows_new = len(self.current_piece[0])
+        rotated_array = []
+        for i in range(num_rows_new):
+            new_row = [0] * num_cols_new
+            for j in range(num_cols_new):
+                new_row[j] = self.current_piece[(num_rows_orig - 1) - j][i]
+            rotated_array.append(new_row)
+        self.current_piece = rotated_array
 
 
 class Tetris:
@@ -127,16 +137,13 @@ class Tetris:
         self.figure = Figure(3, 0)
         self.pieces += 1
 
-    def intersects(self):
+    def intersects(self, figure):
         intersection = False
-        for i in range(4):
-            for j in range(4):
-                if i * 4 + j in self.figure.image():
-                    if i + self.figure.y > self.height - 1 or \
-                            j + self.figure.x > self.width - 1 or \
-                            j + self.figure.x < 0 or \
-                            self.field[i + self.figure.y][j + self.figure.x] > 0:
-                        intersection = True
+        new_y = figure.y + 1
+        for y in range(len(figure.current_piece)):
+            for x in range(len(figure.current_piece[y])):
+                if (new_y + y > self.height - 1 or self.field[new_y+y][figure.x+x]>0)  and figure.current_piece[y][x]:
+                    intersection = True
         return intersection
 
     def break_lines(self, field):
@@ -184,22 +191,19 @@ class Tetris:
         states = {}
         if self.figure == None:
             self.new_figure()
-        # print("piece: "+str(self.figure.type))
         #loop over rotations of the piece
-        # print("num rots: "+str(len(self.figure.figures[self.figure.type])))
-        for r in range(len(self.figure.figures[self.figure.type])):
-            for x in range(0, self.width-2):
-                #valid x coordinate for this piece at current rotation
+        for r in range(self.figure.num_rotations):
+            #valid x coordinate for this piece at current rotation
+            for x in range(self.width - len(self.figure.current_piece[0]) + 1):
                 self.figure.x = x
-                self.figure.y=0
-                if not self.intersects():
-                    #move piece as far down as possible
-                    while not self.intersects():
-                        self.figure.y += 1
-                    self.figure.y -= 1
-                    field = self.store_piece()
-                    # print("x: "+ str(x) + ", rotation: "+str(r)+ " "+ str(field))
-                    states[(x, r)] = self.get_cleared_field_state(field)
+                self.figure.y = 0
+                #move piece as far down as possible
+                while not self.intersects(self.figure):
+                    self.figure.y += 1
+                #TRUNCATE?
+                field = self.store_piece()
+                # print("x: "+ str(x) + ", rotation: "+str(r)+ " "+ str(field))
+                states[(x, r)] = self.get_cleared_field_state(field)
                 # else:
                 #     print("x coord int: "+str(x))
                 #     print("y coord int: "+str(self.figure.y))
@@ -215,14 +219,14 @@ class Tetris:
         
 
     def go_space(self):
-        while not self.intersects():
+        while not self.intersects(self.figure):
             self.figure.y += 1
         self.figure.y -= 1
         self.freeze()
 
     def go_down(self):
         self.figure.y += 1
-        if self.intersects():
+        if self.intersects(self.figure):
             self.figure.y -= 1
             self.freeze()
 
@@ -230,54 +234,46 @@ class Tetris:
     def store_piece(self):
         #copy board
         field = [row[:] for row in self.field]
-        # print("x: "+str(self.figure.x))
-        # print("y: "+str(self.figure.y))
-        # print("figure: "+str(self.figure.image()))
-        # print("field: "+str(field))
-        for i in range(4):
-            for j in range(4):
-                if i * 4 + j in self.figure.image():
-                    # if (i + self.figure.y < self.height) and (j + self.figure.x < self.width):
-                    if (i + self.figure.y < self.height):
-                        field[i + self.figure.y][j + self.figure.x] = 1
+        for y in range(len(self.figure.current_piece)):
+            for x in range(len(self.figure.current_piece[y])):
+                if self.figure.current_piece[y][x] and not field[y + self.figure.y][x + self.figure.x]:
+                    field[y + self.figure.y][x + self.figure.x] = self.figure.current_piece[y][x]
         return field
 
     def freeze(self):
-        for i in range(4):
-            for j in range(4):
-                if i * 4 + j in self.figure.image():
-                    # if (i + self.figure.y < self.height) and (j + self.figure.x < self.width):
-                    self.field[i + self.figure.y][j +
-                                                    self.figure.x] = self.figure.color
+        for y in range(len(self.figure.current_piece)):
+            for x in range(len(self.figure.current_piece[y])):
+                if self.figure.current_piece[y][x] and not self.field[y + self.figure.y][x + self.figure.x]:
+                    self.field[y + self.figure.y][x + self.figure.x] = self.figure.current_piece[y][x]
         cleared, self.field = self.break_lines(self.field)
         self.score += cleared ** 2
         self.new_figure()
         # print("board: "+str(game.field))
-        if self.intersects():
+        if self.intersects(self.figure):
             self.state = "gameover"
 
     def go_side(self, dx):
         old_x = self.figure.x
         self.figure.x += dx
-        if self.intersects():
+        if self.intersects(self.figure):
             self.figure.x = old_x
 
-    def rotate(self):
-        old_rotation = self.figure.rotation
-        self.figure.rotate()
-        if self.intersects():
-            self.figure.rotation = old_rotation
+    # def rotate(self):
+    #     old_rotation = self.figure.rotation
+    #     self.figure.rotate()
+    #     if self.intersects():
+    #         self.figure.rotation = old_rotation
 
     def step(self, rotations, x):
         self.figure.x = x
         gameover = False
         for _ in range(rotations):
             self.figure.rotate()
-        if self.intersects():
+        if self.intersects(self.figure):
             gameover = True
-        while not self.intersects():
+        while not self.intersects(self.figure):
             self.figure.y += 1
-        self.figure.y -= 1
+
         self.field = self.store_piece()
         cleared, self.field = self.break_lines(self.field)
         score = self.width * (cleared ** 2) + 1
@@ -289,7 +285,6 @@ class Tetris:
         else:
             self.state = "gameover"
             self.score -= 2
-        # print(self.field)
         return score, gameover
 
 
@@ -329,27 +324,27 @@ class Tetris:
 
 
 # initialize game engine
-# pygame.init()
+pygame.init()
 
-# # rgb colors
-# BLACK = (0, 0, 0)
-# WHITE = (255, 255, 255)
-# GRAY = (192, 192, 192)
+# rgb colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GRAY = (192, 192, 192)
 
-# SCREEN_WIDTH = 500  # 400
-# SCREEN_HEIGHT = 800  # 500
-# size = (SCREEN_WIDTH, SCREEN_HEIGHT)
-# screen = pygame.display.set_mode(size)
+SCREEN_WIDTH = 500  # 400
+SCREEN_HEIGHT = 800  # 500
+size = (SCREEN_WIDTH, SCREEN_HEIGHT)
+screen = pygame.display.set_mode(size)
 
-# pygame.display.set_caption("Tetris")
+pygame.display.set_caption("Tetris")
 
-# # loop until user closes
-# done = False
-# pause = False
-# clock = pygame.time.Clock()
-# fps = 25
-# game = Tetris(20, 10)  # Tetris(20, 10)
-# counter = 0
+# loop until user closes
+done = False
+pause = False
+clock = pygame.time.Clock()
+fps = 25
+game = Tetris(20, 10)  # Tetris(20, 10)
+counter = 0
 
 # if torch.cuda.is_available():
 #     model = torch.load("trained_models/tetris")
@@ -358,116 +353,111 @@ class Tetris:
 #     model = torch.load("trained_models/tetris", map_location=lambda storage, loc: storage)
 # model.eval()
 
-# pressing_down = False
-# ai_events = []
+pressing_down = False
 
-# while not done:
-#     if game.figure is None:
-#         game.new_figure()
-#         # print("board: "+str(game.field))
+while not done:
+    if game.figure is None:
+        game.new_figure()
+        # print("board: "+str(game.field))
 
-#     counter += 1
-#     if counter > 100000:
-#         counter = 0
+    counter += 1
+    if counter > 100000:
+        counter = 0
 
-#     if counter % (fps // game.level // 2) == 0 or pressing_down:
-#         if game.state == "start":
-#             game.go_down()
-#     if ai_events == []:
-#         ai_events = tetris_player.DeepQ(game, model)
-#         print(ai_events)
-#     for event in list(pygame.event.get() + ai_events):
-#     # for event in pygame.event.get():
-#         if event.type == pygame.QUIT:
-#             done = True
-#         if event.type == pygame.KEYDOWN:
-#             if event.key == pygame.K_UP:
-#                 game.rotate()
-#             if event.key == pygame.K_DOWN:
-#                 pressing_down = True
-#             if event.key == pygame.K_LEFT:
-#                 game.go_side(-1)
-#             if event.key == pygame.K_RIGHT:
-#                 game.go_side(1)
-#             if event.key == pygame.K_SPACE:
-#                 game.go_space()
-#             if event.key == pygame.K_ESCAPE:
-#                 game.__init__(20, 10)
+    if counter % (fps // game.level // 2) == 0 or pressing_down:
+        if game.state == "start":
+            game.go_down()
+    for event in pygame.event.get():
+    # for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            done = True
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_UP:
+                game.rotate()
+            if event.key == pygame.K_DOWN:
+                pressing_down = True
+            if event.key == pygame.K_LEFT:
+                game.go_side(-1)
+            if event.key == pygame.K_RIGHT:
+                game.go_side(1)
+            if event.key == pygame.K_SPACE:
+                game.go_space()
+            if event.key == pygame.K_ESCAPE:
+                game.__init__(20, 10)
 
-#         if event.type == pygame.KEYUP:
-#             if event.key == pygame.K_DOWN:
-#                 pressing_down = False
-#     ai_events = []
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_DOWN:
+                pressing_down = False
     
-#     # else:
-#     #     results = game.get_all_states()
-#     #     next_actions, next_states = zip(*results.items())
-#     #     next_states = torch.stack(next_states)
-#     #     if torch.cuda.is_available():
-#     #         next_states = next_states.cuda()
-#     #     predictions = model(next_states)[:, 0]
-#     #     index = torch.argmax(predictions).item()
-#     #     action = next_actions[index]
-#     #     x, rotations = action
-#     #     for _ in range(rotations):
-#     #         game.rotate()
-#     #     if x<3:
-#     #         for i in range(3-x):
-#     #             game.go_side(-1)
-#     #     elif x>3:
-#     #         for j in range(x-3):
-#     #             game.go_side(1)
+    # else:
+    #     results = game.get_all_states()
+    #     next_actions, next_states = zip(*results.items())
+    #     next_states = torch.stack(next_states)
+    #     if torch.cuda.is_available():
+    #         next_states = next_states.cuda()
+    #     predictions = model(next_states)[:, 0]
+    #     index = torch.argmax(predictions).item()
+    #     action = next_actions[index]
+    #     x, rotations = action
+    #     for _ in range(rotations):
+    #         game.rotate()
+    #     if x<3:
+    #         for i in range(3-x):
+    #             game.go_side(-1)
+    #     elif x>3:
+    #         for j in range(x-3):
+    #             game.go_side(1)
 
-#     screen.fill(WHITE)
+    screen.fill(WHITE)
 
-#     for i in range(game.height):
-#         for j in range(game.width):
-#             pygame.draw.rect(screen, GRAY, [
-#                              game.x + game.zoom * j, game.y + game.zoom * i, game.zoom, game.zoom], 1)
-#             if game.field[i][j] > 0:
-#                 pygame.draw.rect(screen, colors[game.field[i][j]],
-#                                  [game.x + game.zoom * j + 1, game.y + game.zoom * i + 1, game.zoom - 2, game.zoom - 1])
+    for i in range(game.height):
+        for j in range(game.width):
+            pygame.draw.rect(screen, GRAY, [
+                             game.x + game.zoom * j, game.y + game.zoom * i, game.zoom, game.zoom], 1)
+            if game.field[i][j] > 0:
+                pygame.draw.rect(screen, colors[game.field[i][j]],
+                                 [game.x + game.zoom * j + 1, game.y + game.zoom * i + 1, game.zoom - 2, game.zoom - 1])
 
-#     if game.figure is not None:
-#         # print("pos: "+str(game.figure.x)+" ,"+str(game.figure.y))
-#         for i in range(4):
-#             for j in range(4):
-#                 p = i * 4 + j
-#                 if p in game.figure.image():
-#                     pygame.draw.rect(screen, colors[game.figure.color],
-#                                      [game.x + game.zoom * (j + game.figure.x) + 1,
-#                                       game.y + game.zoom *
-#                                       (i + game.figure.y) + 1,
-#                                       game.zoom - 2, game.zoom - 2])
+    # if game.figure is not None:
+    #     # print("pos: "+str(game.figure.x)+" ,"+str(game.figure.y))
+    #     for i in range(4):
+    #         for j in range(4):
+    #             p = i * 4 + j
+    #             if p in game.figure.image():
+    #                 pygame.draw.rect(screen, colors[game.figure.color],
+    #                                  [game.x + game.zoom * (j + game.figure.x) + 1,
+    #                                   game.y + game.zoom *
+    #                                   (i + game.figure.y) + 1,
+    #                                   game.zoom - 2, game.zoom - 2])
 
-#     font_small = pygame.font.SysFont('Corbel', 24, True, False)
-#     font_large = pygame.font.SysFont('Corbel', 60, True, False)
-#     font_med = pygame.font.SysFont('Corbel', 36, True, False)
-#     text_score = font_small.render("Score: " + str(game.score), True, BLACK)
-#     text_pieces = font_small.render("Pieces: " + str(game.pieces), True, BLACK)
-#     text_game_over = font_large.render("Game Over", True, BLACK)
-#     text_game_over1 = font_med.render("Press ESC", True, BLACK)
+    font_small = pygame.font.SysFont('Corbel', 24, True, False)
+    font_large = pygame.font.SysFont('Corbel', 60, True, False)
+    font_med = pygame.font.SysFont('Corbel', 36, True, False)
+    text_score = font_small.render("Score: " + str(game.score), True, BLACK)
+    text_pieces = font_small.render("Pieces: " + str(game.pieces), True, BLACK)
+    text_game_over = font_large.render("Game Over", True, BLACK)
+    text_game_over1 = font_med.render("Press ESC", True, BLACK)
 
-#     screen.blit(text_score, [12, 12])
-#     screen.blit(text_pieces, [12, 36])
-#     if game.state == "gameover":
-#         screen.blit(text_game_over, [
-#                     (SCREEN_WIDTH-text_game_over.get_width())/2, 200])
-#         screen.blit(text_game_over1, [
-#                     (SCREEN_WIDTH-text_game_over1.get_width())/2, 265])
-#         pause = True
-#         done = True
+    screen.blit(text_score, [12, 12])
+    screen.blit(text_pieces, [12, 36])
+    if game.state == "gameover":
+        screen.blit(text_game_over, [
+                    (SCREEN_WIDTH-text_game_over.get_width())/2, 200])
+        screen.blit(text_game_over1, [
+                    (SCREEN_WIDTH-text_game_over1.get_width())/2, 265])
+        pause = True
+        done = True
 
-#     pygame.display.flip()
-#     clock.tick(fps)
+    pygame.display.flip()
+    clock.tick(fps)
 
-# while pause:
-#     for event in pygame.event.get():
+while pause:
+    for event in pygame.event.get():
 
-#         if event.type == pygame.QUIT:
-#             pygame.quit()
-#             quit()
-#     pygame.display.flip()
-#     clock.tick(fps)
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            quit()
+    pygame.display.flip()
+    clock.tick(fps)
 
-# pygame.quit()
+pygame.quit()
