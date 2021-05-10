@@ -3,7 +3,13 @@ import random
 import tetris_player
 import numpy as np
 import torch
+import sys
 
+# arg = sys.argv[0]
+# if arg == "human":
+#     DeepQ = False
+# else:
+#     DeepQ = True
 
 colors = [          # rbg color values for tetromino shapes
     (0, 0, 0),
@@ -182,7 +188,7 @@ class Tetris:
         #loop over rotations of the piece
         # print("num rots: "+str(len(self.figure.figures[self.figure.type])))
         for r in range(len(self.figure.figures[self.figure.type])):
-            for x in range(-3, self.width+1):
+            for x in range(0, self.width-2):
                 #valid x coordinate for this piece at current rotation
                 self.figure.x = x
                 self.figure.y=0
@@ -231,7 +237,8 @@ class Tetris:
         for i in range(4):
             for j in range(4):
                 if i * 4 + j in self.figure.image():
-                    if (i + self.figure.y < self.height) and (j + self.figure.x < self.width):
+                    # if (i + self.figure.y < self.height) and (j + self.figure.x < self.width):
+                    if (i + self.figure.y < self.height):
                         field[i + self.figure.y][j + self.figure.x] = 1
         return field
 
@@ -239,12 +246,13 @@ class Tetris:
         for i in range(4):
             for j in range(4):
                 if i * 4 + j in self.figure.image():
+                    # if (i + self.figure.y < self.height) and (j + self.figure.x < self.width):
                     self.field[i + self.figure.y][j +
-                                                  self.figure.x] = self.figure.color
+                                                    self.figure.x] = self.figure.color
         cleared, self.field = self.break_lines(self.field)
         self.score += cleared ** 2
         self.new_figure()
-        print("board: "+str(game.field))
+        # print("board: "+str(game.field))
         if self.intersects():
             self.state = "gameover"
 
@@ -286,6 +294,8 @@ class Tetris:
 
 
 
+
+
 # game = Tetris(20,10)
 # game.field = [
 # [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -318,7 +328,7 @@ class Tetris:
 # print("holes: " +str(game.get_holes()))
 
 
-# # initialize game engine
+# initialize game engine
 # pygame.init()
 
 # # rgb colors
@@ -341,12 +351,20 @@ class Tetris:
 # game = Tetris(20, 10)  # Tetris(20, 10)
 # counter = 0
 
+# if torch.cuda.is_available():
+#     model = torch.load("trained_models/tetris")
+#     model = model.cuda()
+# else:
+#     model = torch.load("trained_models/tetris", map_location=lambda storage, loc: storage)
+# model.eval()
+
 # pressing_down = False
+# ai_events = []
 
 # while not done:
 #     if game.figure is None:
 #         game.new_figure()
-#         print("board: "+str(game.field))
+#         # print("board: "+str(game.field))
 
 #     counter += 1
 #     if counter > 100000:
@@ -355,9 +373,11 @@ class Tetris:
 #     if counter % (fps // game.level // 2) == 0 or pressing_down:
 #         if game.state == "start":
 #             game.go_down()
-
-#     # for event in list(pygame.event.get()) + tetris_player.random_move():
-#     for event in pygame.event.get():
+#     if ai_events == []:
+#         ai_events = tetris_player.DeepQ(game, model)
+#         print(ai_events)
+#     for event in list(pygame.event.get() + ai_events):
+#     # for event in pygame.event.get():
 #         if event.type == pygame.QUIT:
 #             done = True
 #         if event.type == pygame.KEYDOWN:
@@ -374,9 +394,29 @@ class Tetris:
 #             if event.key == pygame.K_ESCAPE:
 #                 game.__init__(20, 10)
 
-#     if event.type == pygame.KEYUP:
-#         if event.key == pygame.K_DOWN:
-#             pressing_down = False
+#         if event.type == pygame.KEYUP:
+#             if event.key == pygame.K_DOWN:
+#                 pressing_down = False
+#     ai_events = []
+    
+#     # else:
+#     #     results = game.get_all_states()
+#     #     next_actions, next_states = zip(*results.items())
+#     #     next_states = torch.stack(next_states)
+#     #     if torch.cuda.is_available():
+#     #         next_states = next_states.cuda()
+#     #     predictions = model(next_states)[:, 0]
+#     #     index = torch.argmax(predictions).item()
+#     #     action = next_actions[index]
+#     #     x, rotations = action
+#     #     for _ in range(rotations):
+#     #         game.rotate()
+#     #     if x<3:
+#     #         for i in range(3-x):
+#     #             game.go_side(-1)
+#     #     elif x>3:
+#     #         for j in range(x-3):
+#     #             game.go_side(1)
 
 #     screen.fill(WHITE)
 
@@ -389,6 +429,7 @@ class Tetris:
 #                                  [game.x + game.zoom * j + 1, game.y + game.zoom * i + 1, game.zoom - 2, game.zoom - 1])
 
 #     if game.figure is not None:
+#         # print("pos: "+str(game.figure.x)+" ,"+str(game.figure.y))
 #         for i in range(4):
 #             for j in range(4):
 #                 p = i * 4 + j
@@ -416,8 +457,6 @@ class Tetris:
 #                     (SCREEN_WIDTH-text_game_over1.get_width())/2, 265])
 #         pause = True
 #         done = True
-#         game.get_holes()
-#         game.get_height_variability()
 
 #     pygame.display.flip()
 #     clock.tick(fps)

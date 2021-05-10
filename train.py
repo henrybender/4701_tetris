@@ -16,8 +16,10 @@ EPS_END = 0.001
 EPS_DECAY = 2000
 SAVE_INTERVAL = 10
 LEARNING_RATE = 0.001
-EPOCHS = 3000
+EPOCHS = 2500
 MEMORY_SIZE = 30000
+SAVE_PATH = "new_trained_models"
+SAVE_INTERVAL = 500
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -91,19 +93,22 @@ def optimize_model(memory, model, optimizer, criterion):
 
 def train():
   torch.cuda.seed()
-  env = Tetris(20, 10)
+  # env = Tetris(20, 10)
+  env = Tetris(width = 10, height = 20, block_size = 30)
   model = DQN()
   optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE)
   criterion = nn.MSELoss()
   memory = ReplayMemory(MEMORY_SIZE)
-  state = env.get_new_state()
+  # state = env.get_new_state()
+  # state = env.reset()
   
   if torch.cuda.is_available():
     model.cuda()
     state = state.cuda()
   epoch = 0
   while epoch < EPOCHS:
-    results = env.get_all_states()
+    # results = env.get_all_states()
+    # results = env.get_next_states()
     if results:
       action, next_state = select_action(epoch, results, model)
     else:
@@ -112,17 +117,21 @@ def train():
     if torch.cuda.is_available():
       next_state = next_state.cuda()
     x, rotations = action
-    reward, done = env.step(rotations, x)
+    # reward, done = env.step(rotations, x)
+    # reward, done = env.step(action, render=False)
     memory.push(state, reward, next_state, done)
 
-    if not done:
+    if done:
+      # score = env.score
+      # pieces = env.pieces
+      # pieces = env.tetrominoes
+      # cleared = env.cleared
+      # cleared = env.cleared_lines
+      # state = env.get_new_state()
+      state = env.reset()
+    else:
       state = next_state
       continue
-    else:
-      score = env.score
-      pieces = env.pieces
-      cleared = env.cleared
-      state = env.get_new_state()
     epoch += 1
     optimize_model(memory, model, optimizer, criterion)
 
@@ -132,6 +141,10 @@ def train():
     score,
     pieces,
     cleared))
+    if epoch > 0 and epoch%SAVE_INTERVAL == 0:
+      torch.save(model, "{}/tetris_{}".format(SAVE_PATH, epoch))
+
+  torch.save(model, "{}/tetris".format(SAVE_PATH))
 
 train()
 
