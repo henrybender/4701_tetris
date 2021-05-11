@@ -33,7 +33,7 @@ class Figure:
     x = 0
     y = 0
 
-    #   tetrominos defined 
+    #   tetrominos defined
 
     figures = [
         [[1, 1],
@@ -75,10 +75,9 @@ class Figure:
             self.num_rotations = 2
         else:
             self.num_rotations = 4
-        
 
     def image(self):
-        return self.current_piece()
+        return self.current_piece
 
     def rotate(self):
         num_rows_orig = num_cols_new = len(self.current_piece)
@@ -118,7 +117,7 @@ class Tetris:
             for j in range(width):
                 new_line.append(0)
             self.field.append(new_line)
-    
+
     def get_new_state(self):
         self.field = []
         self.score = 0
@@ -142,7 +141,8 @@ class Tetris:
         new_y = figure.y + 1
         for y in range(len(figure.current_piece)):
             for x in range(len(figure.current_piece[y])):
-                if (new_y + y > self.height - 1 or self.field[new_y+y][figure.x+x]>0)  and figure.current_piece[y][x]:
+                x_bounds = figure.x + x > self.width - 1 or figure.x + x < 0
+                if (new_y + y > self.height - 1 or x_bounds or self.field[new_y+y][figure.x+x]) and figure.current_piece[y][x]:
                     intersection = True
         return intersection
 
@@ -168,8 +168,6 @@ class Tetris:
             while row < self.height and col[row] == 0:
                 row += 1
             holes += len([x for x in col[row + 1:] if x == 0])
-            # if self.field[i][j] == 0:
-            #   holes += 1
         # print("holes : " + str(holes) + "\n")
         return holes
 
@@ -191,16 +189,16 @@ class Tetris:
         states = {}
         if self.figure == None:
             self.new_figure()
-        #loop over rotations of the piece
+        # loop over rotations of the piece
         for r in range(self.figure.num_rotations):
-            #valid x coordinate for this piece at current rotation
+            # valid x coordinate for this piece at current rotation
             for x in range(self.width - len(self.figure.current_piece[0]) + 1):
                 self.figure.x = x
                 self.figure.y = 0
-                #move piece as far down as possible
+                # move piece as far down as possible
                 while not self.intersects(self.figure):
                     self.figure.y += 1
-                #TRUNCATE?
+                self.overflow(self.figure)
                 field = self.store_piece()
                 # print("x: "+ str(x) + ", rotation: "+str(r)+ " "+ str(field))
                 states[(x, r)] = self.get_cleared_field_state(field)
@@ -216,7 +214,6 @@ class Tetris:
         holes = self.get_holes(field)
         total_height, variability = self.get_height_variability(field)
         return torch.FloatTensor([cleared, holes, variability, total_height])
-        
 
     def go_space(self):
         while not self.intersects(self.figure):
@@ -227,24 +224,46 @@ class Tetris:
     def go_down(self):
         self.figure.y += 1
         if self.intersects(self.figure):
-            self.figure.y -= 1
+            #self.figure.y -= 1
             self.freeze()
 
-    #copy current field and store current figure into it, truncating blocks if out of bounds
+    def overflow(self, figure):
+        gameover = False
+        intersect_row = -1
+        for y in range(len(self.figure.current_piece)):
+            for x in range(len(self.figure.current_piece[y])):
+                if self.field[self.figure.y + y][self.figure.x + x] and self.figure.current_piece[y][x]:
+                    if y > intersect_row:
+                        intersect_row = y
+
+        if self.figure.y - (len(self.figure.current_piece) - intersect_row) < 0 and intersect_row > -1:
+            while intersect_row >= 0 and len(self.figure.current_piece) > 1:
+                gameover = True
+                intersect_row = -1
+                del self.figure.current_piece[0]
+                for y in range(len(self.figure.current_piece)):
+                    for x in range(len(self.figure.current_piece[y])):
+                        if self.field[self.figure.y + y][self.figure.x + x] and self.figure.current_piece[y][x] and y > intersect_row:
+                            intersect_row = y
+        return gameover
+
+    # copy current field and store current figure into it, truncating blocks if out of bounds
     def store_piece(self):
-        #copy board
+        # copy board
         field = [row[:] for row in self.field]
         for y in range(len(self.figure.current_piece)):
             for x in range(len(self.figure.current_piece[y])):
                 if self.figure.current_piece[y][x] and not field[y + self.figure.y][x + self.figure.x]:
-                    field[y + self.figure.y][x + self.figure.x] = self.figure.current_piece[y][x]
+                    field[y + self.figure.y][x +
+                                             self.figure.x] = self.figure.current_piece[y][x]
         return field
 
     def freeze(self):
         for y in range(len(self.figure.current_piece)):
             for x in range(len(self.figure.current_piece[y])):
                 if self.figure.current_piece[y][x] and not self.field[y + self.figure.y][x + self.figure.x]:
-                    self.field[y + self.figure.y][x + self.figure.x] = self.figure.current_piece[y][x]
+                    self.field[y + self.figure.y][x +
+                                                  self.figure.x] = self.figure.current_piece[y][x]
         cleared, self.field = self.break_lines(self.field)
         self.score += cleared ** 2
         self.new_figure()
@@ -269,11 +288,11 @@ class Tetris:
         gameover = False
         for _ in range(rotations):
             self.figure.rotate()
-        if self.intersects(self.figure):
-            gameover = True
         while not self.intersects(self.figure):
             self.figure.y += 1
-
+        # if self.intersects(self.figure):
+        if self.overflow():
+            gameover = True
         self.field = self.store_piece()
         cleared, self.field = self.break_lines(self.field)
         score = self.width * (cleared ** 2) + 1
@@ -288,41 +307,35 @@ class Tetris:
         return score, gameover
 
 
-
-
-
 # game = Tetris(20,10)
 # game.field = [
 # [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
 # [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 # [1, 0, 0, 0, 0, 0, 1, 1, 0, 0],
-# [1, 1, 1, 1, 1, 0, 0, 1, 0, 0], 
-# [1, 1, 0, 1, 1, 1, 0, 1, 0, 0], 
-# [1, 1, 0, 1, 1, 1, 0, 1, 1, 1], 
-# [1, 1, 1, 0, 1, 1, 0, 0, 1, 1], 
-# [1, 0, 1, 0, 0, 1, 0, 1, 1, 0], 
+# [1, 1, 1, 1, 1, 0, 0, 1, 0, 0],
+# [1, 1, 0, 1, 1, 1, 0, 1, 0, 0],
+# [1, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+# [1, 1, 1, 0, 1, 1, 0, 0, 1, 1],
+# [1, 0, 1, 0, 0, 1, 0, 1, 1, 0],
 # [1, 1, 1, 1, 0, 1, 1, 1, 1, 0]]
 # game.new_figure()
 # game.step(1, 7)
 # states = game.get_all_states()
 # print(states.items())
 # print("num states: "+str(len(states.items())))
-
 # print("height var: " +str(game.get_height_variability()))
 # print("holes: " +str(game.get_holes()))
-
-
 # initialize game engine
 pygame.init()
 
@@ -368,12 +381,12 @@ while not done:
         if game.state == "start":
             game.go_down()
     for event in pygame.event.get():
-    # for event in pygame.event.get():
+        # for event in pygame.event.get():
         if event.type == pygame.QUIT:
             done = True
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
-                game.rotate()
+                game.figure.rotate()
             if event.key == pygame.K_DOWN:
                 pressing_down = True
             if event.key == pygame.K_LEFT:
@@ -388,7 +401,7 @@ while not done:
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_DOWN:
                 pressing_down = False
-    
+
     # else:
     #     results = game.get_all_states()
     #     next_actions, next_states = zip(*results.items())
