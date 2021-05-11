@@ -141,24 +141,39 @@ class Tetris:
         new_y = figure.y + 1
         for y in range(len(figure.current_piece)):
             for x in range(len(figure.current_piece[y])):
-                x_bounds = figure.x + x > self.width - 1 or figure.x + x < 0
+                x_bounds = figure.x + x > self.width - 1 or figure.x < 0
                 if (new_y + y > self.height - 1 or x_bounds or self.field[new_y+y][figure.x+x]) and figure.current_piece[y][x]:
                     intersection = True
         return intersection
 
-    def break_lines(self, field):
-        cleared = 0
-        for i in range(1, self.height):
-            zeros = 0
-            for j in range(self.width):
-                if field[i][j] == 0:
-                    zeros += 1
-            if zeros == 0:
-                cleared += 1
-                for i1 in range(i, 1, -1):
-                    for j in range(self.width):
-                        field[i1][j] = field[i1 - 1][j]
-        return cleared, field
+    # def break_lines(self, field):
+    #     cleared = 0
+    #     for i in range(1, self.height):
+    #         zeros = 0
+    #         for j in range(self.width):
+    #             if field[i][j] == 0:
+    #                 zeros += 1
+    #         if zeros == 0:
+    #             cleared += 1
+    #             for i1 in range(i, 1, -1):
+    #                 for j in range(self.width):
+    #                     field[i1][j] = field[i1 - 1][j]
+    #     return cleared, field
+
+    def check_cleared_rows(self, board):
+        to_delete = []
+        for i, row in enumerate(board[::-1]):
+            if 0 not in row:
+                to_delete.append(len(board) - 1 - i)
+        if len(to_delete) > 0:
+            board = self.remove_row(board, to_delete)
+        return len(to_delete), board
+
+    def remove_row(self, board, indices):
+        for i in indices[::-1]:
+            del board[i]
+            board = [[0 for _ in range(self.width)]] + board
+        return board
 
     def get_holes(self, field):
         holes = 0
@@ -186,6 +201,7 @@ class Tetris:
         return total_height, variability
 
     def get_all_states(self):
+        old_x = self.figure.x
         states = {}
         if self.figure == None:
             self.new_figure()
@@ -198,7 +214,7 @@ class Tetris:
                 # move piece as far down as possible
                 while not self.intersects(self.figure):
                     self.figure.y += 1
-                self.overflow(self.figure)
+                # self.overflow(self.figure)
                 field = self.store_piece()
                 # print("x: "+ str(x) + ", rotation: "+str(r)+ " "+ str(field))
                 states[(x, r)] = self.get_cleared_field_state(field)
@@ -207,10 +223,12 @@ class Tetris:
                 #     print("y coord int: "+str(self.figure.y))
                 #     print("rot int: "+str(r))
             self.figure.rotate()
+        # self.figure.x = old_x
+        # self.figure.y = 0
         return states
 
     def get_cleared_field_state(self, field):
-        cleared, field = self.break_lines(field)
+        cleared, field = self.check_cleared_rows(field)
         holes = self.get_holes(field)
         total_height, variability = self.get_height_variability(field)
         return torch.FloatTensor([cleared, holes, variability, total_height])
@@ -264,7 +282,7 @@ class Tetris:
                 if self.figure.current_piece[y][x] and not self.field[y + self.figure.y][x + self.figure.x]:
                     self.field[y + self.figure.y][x +
                                                   self.figure.x] = self.figure.current_piece[y][x]
-        cleared, self.field = self.break_lines(self.field)
+        cleared, self.field = self.check_cleared_rows(self.field)
         self.score += cleared ** 2
         self.new_figure()
         # print("board: "+str(game.field))
@@ -290,11 +308,13 @@ class Tetris:
             self.figure.rotate()
         while not self.intersects(self.figure):
             self.figure.y += 1
+
         # if self.intersects(self.figure):
-        if self.overflow():
+        if self.figure.y <= 0:
+        # if self.overflow(self.figure):
             gameover = True
         self.field = self.store_piece()
-        cleared, self.field = self.break_lines(self.field)
+        cleared, self.field = self.check_cleared_rows(self.field)
         score = self.width * (cleared ** 2) + 1
         self.score += score
         self.pieces += 1
@@ -304,9 +324,28 @@ class Tetris:
         else:
             self.state = "gameover"
             self.score -= 2
+        # if draw:
+        #     pygame.time.delay(5)
+        #     self.draw(screen)
         return score, gameover
 
+    def draw(self, screen):
+        for i in range(self.height):
+            for j in range(self.width):
+                pygame.draw.rect(screen, GRAY, [
+                                self.x + self.zoom * j, self.y + self.zoom * i, self.zoom, self.zoom], 1)
+                if self.field[i][j] > 0:
+                    pygame.draw.rect(screen, colors[self.field[i][j]],
+                                    [self.x + self.zoom * j + 1, self.y + self.zoom * i + 1, self.zoom - 2, self.zoom - 1])
 
+        if self.figure is not None:
+            for i in range(len(self.figure.current_piece)):
+                for j in range(len(self.figure.current_piece[i])):
+                    if self.figure.current_piece[i][j]:
+                        pygame.draw.rect(screen, colors[self.figure.color],
+                                        [self.x + self.zoom * (j + self.figure.x) + 1,
+                                        self.y + self.zoom * (i + self.figure.y) + 1,
+                                        self.zoom - 2, self.zoom - 2])
 # game = Tetris(20,10)
 # game.field = [
 # [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -359,20 +398,37 @@ fps = 25
 game = Tetris(20, 10)  # Tetris(20, 10)
 counter = 0
 
-# if torch.cuda.is_available():
-#     model = torch.load("trained_models/tetris")
-#     model = model.cuda()
-# else:
-#     model = torch.load("trained_models/tetris", map_location=lambda storage, loc: storage)
-# model.eval()
+if torch.cuda.is_available():
+    model = torch.load("trained_models/tetris")
+    model = model.cuda()
+else:
+    model = torch.load("trained_models/tetris", map_location=lambda storage, loc: storage)
+model.eval()
 
 pressing_down = False
 
 while not done:
+    # counter += 1
+    # if counter > 100000:
+    #     counter = 0
+    # if counter % (fps // game.level // 2) == 0:
+    #     pygame.display.flip()
+    #     clock.tick(fps)
     if game.figure is None:
         game.new_figure()
-        # print("board: "+str(game.field))
 
+    #     # print("board: "+str(game.field))
+    results = game.get_all_states()
+    next_actions, next_states = zip(*results.items())
+    next_states = torch.stack(next_states)
+    if torch.cuda.is_available():
+        next_states = next_states.cuda()
+    predictions = model(next_states)[:, 0]
+    index = torch.argmax(predictions).item()
+    x, rotation = next_actions[index]
+    _, done = game.step(rotation, x)
+    if game.figure is None:
+        game.new_figure()
     counter += 1
     if counter > 100000:
         counter = 0
@@ -381,12 +437,11 @@ while not done:
         if game.state == "start":
             game.go_down()
     for event in pygame.event.get():
-        # for event in pygame.event.get():
         if event.type == pygame.QUIT:
             done = True
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
-                game.figure.rotate()
+                game.rotate()
             if event.key == pygame.K_DOWN:
                 pressing_down = True
             if event.key == pygame.K_LEFT:
@@ -397,10 +452,47 @@ while not done:
                 game.go_space()
             if event.key == pygame.K_ESCAPE:
                 game.__init__(20, 10)
+    screen.fill(WHITE)
 
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_DOWN:
-                pressing_down = False
+    for i in range(game.height):
+        for j in range(game.width):
+            pygame.draw.rect(screen, GRAY, [
+                             game.x + game.zoom * j, game.y + game.zoom * i, game.zoom, game.zoom], 1)
+            if game.field[i][j] > 0:
+                pygame.draw.rect(screen, colors[game.field[i][j]],
+                                 [game.x + game.zoom * j + 1, game.y + game.zoom * i + 1, game.zoom - 2, game.zoom - 1])
+
+
+
+    font_small = pygame.font.SysFont('Corbel', 24, True, False)
+    font_large = pygame.font.SysFont('Corbel', 60, True, False)
+    font_med = pygame.font.SysFont('Corbel', 36, True, False)
+    text_score = font_small.render("Score: " + str(game.score), True, BLACK)
+    text_pieces = font_small.render("Pieces: " + str(game.pieces), True, BLACK)
+    text_game_over = font_large.render("Game Over", True, BLACK)
+    text_game_over1 = font_med.render("Press ESC", True, BLACK)
+
+    screen.blit(text_score, [12, 12])
+    screen.blit(text_pieces, [12, 36])
+    if game.state == "gameover":
+        screen.blit(text_game_over, [
+                    (SCREEN_WIDTH-text_game_over.get_width())/2, 200])
+        screen.blit(text_game_over1, [
+                    (SCREEN_WIDTH-text_game_over1.get_width())/2, 265])
+        pause = True
+        done = True
+    pygame.display.flip()
+    clock.tick(fps)
+
+
+    # if game.figure is not None:
+    #     for i in range(len(game.figure.current_piece)):
+    #         for j in range(len(game.figure.current_piece[i])):
+    #             if game.figure.current_piece[i][j]:
+    #                 pygame.draw.rect(screen, colors[game.figure.color],
+    #                                  [game.x + game.zoom * (j + game.figure.x) + 1,
+    #                                   game.y + game.zoom * (i + game.figure.y) + 1,
+    #                                   game.zoom - 2, game.zoom - 2])
 
     # else:
     #     results = game.get_all_states()
@@ -421,49 +513,6 @@ while not done:
     #         for j in range(x-3):
     #             game.go_side(1)
 
-    screen.fill(WHITE)
-
-    for i in range(game.height):
-        for j in range(game.width):
-            pygame.draw.rect(screen, GRAY, [
-                             game.x + game.zoom * j, game.y + game.zoom * i, game.zoom, game.zoom], 1)
-            if game.field[i][j] > 0:
-                pygame.draw.rect(screen, colors[game.field[i][j]],
-                                 [game.x + game.zoom * j + 1, game.y + game.zoom * i + 1, game.zoom - 2, game.zoom - 1])
-
-    # if game.figure is not None:
-    #     # print("pos: "+str(game.figure.x)+" ,"+str(game.figure.y))
-    #     for i in range(4):
-    #         for j in range(4):
-    #             p = i * 4 + j
-    #             if p in game.figure.image():
-    #                 pygame.draw.rect(screen, colors[game.figure.color],
-    #                                  [game.x + game.zoom * (j + game.figure.x) + 1,
-    #                                   game.y + game.zoom *
-    #                                   (i + game.figure.y) + 1,
-    #                                   game.zoom - 2, game.zoom - 2])
-
-    font_small = pygame.font.SysFont('Corbel', 24, True, False)
-    font_large = pygame.font.SysFont('Corbel', 60, True, False)
-    font_med = pygame.font.SysFont('Corbel', 36, True, False)
-    text_score = font_small.render("Score: " + str(game.score), True, BLACK)
-    text_pieces = font_small.render("Pieces: " + str(game.pieces), True, BLACK)
-    text_game_over = font_large.render("Game Over", True, BLACK)
-    text_game_over1 = font_med.render("Press ESC", True, BLACK)
-
-    screen.blit(text_score, [12, 12])
-    screen.blit(text_pieces, [12, 36])
-    if game.state == "gameover":
-        screen.blit(text_game_over, [
-                    (SCREEN_WIDTH-text_game_over.get_width())/2, 200])
-        screen.blit(text_game_over1, [
-                    (SCREEN_WIDTH-text_game_over1.get_width())/2, 265])
-        pause = True
-        done = True
-
-    pygame.display.flip()
-    clock.tick(fps)
-
 while pause:
     for event in pygame.event.get():
 
@@ -472,5 +521,6 @@ while pause:
             quit()
     pygame.display.flip()
     clock.tick(fps)
+
 
 pygame.quit()
